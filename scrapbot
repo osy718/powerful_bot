@@ -1,0 +1,65 @@
+import requests
+from bs4 import BeautifulSoup
+import openai
+import base64
+
+# Set your OpenAI API key
+openai.api_key = "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"
+
+# Function to scrape GSMArena
+def scrape_gsmarena(url):
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        soup = BeautifulSoup(response.content, "html.parser")
+        title = soup.find("h1", class_="article-info-name").text.strip()
+        content = "\n".join([p.text for p in soup.find_all("p")])
+        return title, content
+    else:
+        print("Failed to fetch article")
+        return None, None
+
+# Function to reprocess content using ChatGPT
+def reprocess_content(title, content):
+    prompt = f"Summarize and critically analyze the following article:\n\nTitle: {title}\n\nContent: {content}\n\nProvide a structured blog post with pros and cons, and key takeaways."
+    response = openai.Completion.create(
+        engine="text-davinci-003",
+        prompt=prompt,
+        max_tokens=1000
+    )
+    return response.choices[0].text.strip()
+
+# Function to post to WordPress
+def post_to_wordpress(title, content):
+    wp_url = "https://kooworldfix.com/wp-json/wp/v2/posts"
+    wp_user = "Admin-KooWorldFix"  # Replace with your WordPress username
+    wp_password = "Qwerty.97"      # Replace with your WordPress application password
+
+    # Encode credentials for Basic Auth
+    credentials = f"{wp_user}:{wp_password}"
+    token = base64.b64encode(credentials.encode()).decode()
+
+    headers = {
+        "Authorization": f"Basic {token}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "title": title,
+        "content": content,
+        "status": "publish"  # Set to 'draft' if you want to review first
+    }
+
+    response = requests.post(wp_url, json=payload, headers=headers)
+    if response.status_code == 201:
+        print("Post published successfully!")
+    else:
+        print("Failed to publish post:", response.text)
+
+# Main workflow
+gsmarena_url = "https://m.gsmarena.com/reviews.php3"  # Replace with a real URL
+title, content = scrape_gsmarena(gsmarena_url)
+
+if title and content:
+    processed_content = reprocess_content(title, content)
+    post_to_wordpress(title, processed_content)
